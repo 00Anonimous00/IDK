@@ -1,0 +1,327 @@
+import random
+import time
+import pygame
+
+# Function to load background music for the current zone
+def load_music(zone):
+    try:
+        pygame.mixer.init()
+        pygame.mixer.music.load(f"music/zone_{zone}.mp3")  # Music should be stored in the 'music/' folder
+        pygame.mixer.music.play(-1)  # Infinite loop
+    except Exception as e:
+        print(f"Error loading music: {e}")
+
+# Function to pause music when the game is paused or finished
+def pause_music():
+    pygame.mixer.music.stop()
+
+# === Game Classes ===
+
+class Player:
+    def __init__(self, name, char_class='Warrior'):
+        self.name = name
+        self.char_class = char_class
+        self.level = 1
+        self.hp = 100
+        self.points = 0
+        self.experience = 0
+        self.skills = {'attack': 10, 'defense': 5, 'agility': 5, 'magic': 5}
+        self.inventory = []
+        self.mana = 50
+        self.completed_zones = 0
+        self.completed_sidequests = 0
+        self.extra_attributes = {}  # Special powers or buffs
+        self.max_hp = self.hp
+        self.coins = 0  # Coins to buy items
+
+    def level_up(self):
+        if self.experience >= self.level * 20:
+            self.level += 1
+            self.skills['attack'] += 5
+            self.skills['defense'] += 3
+            self.skills['agility'] += 2
+            self.max_hp += 10
+            self.hp = self.max_hp
+            self.mana += 10
+            print(f"{self.name} leveled up to level {self.level}!")
+
+    def take_damage(self, damage):
+        self.hp -= damage
+        if self.hp < 0:
+            self.hp = 0
+        print(f"{self.name} lost {damage} health. Current health: {self.hp}")
+
+    def heal(self, healing):
+        self.hp += healing
+        if self.hp > self.max_hp:
+            self.hp = self.max_hp
+        print(f"{self.name} healed {healing} health. Current health: {self.hp}")
+
+    def use_item(self, item):
+        if item in self.inventory:
+            self.inventory.remove(item)
+            if item == 'Health Potion':
+                self.heal(30)
+            elif item == 'Mana Potion':
+                self.mana += 20
+                if self.mana > 50:
+                    self.mana = 50
+                print(f"{self.name} used a {item}. Mana: {self.mana}")
+            else:
+                print(f"The item {item} has no effect.")
+        else:
+            print(f"{item} not found in inventory.")
+
+    def add_item(self, item):
+        self.inventory.append(item)
+        print(f"{self.name} acquired {item}!")
+
+    def add_coins(self, amount):
+        self.coins += amount
+        print(f"{self.name} found {amount} coins. Total: {self.coins}")
+
+    def status(self):
+        print(f"\nStatus of {self.name}:")
+        print(f"Class: {self.char_class}")
+        print(f"Level: {self.level} | Health: {self.hp}/{self.max_hp}")
+        print(f"Mana: {self.mana} | Experience: {self.experience}")
+        print(f"Inventory: {', '.join(self.inventory)}")
+        print(f"Completed Sidequests: {self.completed_sidequests}")
+        print(f"Coins: {self.coins}")
+
+    def cast_magic(self, magic):
+        if magic == 'Fire Explosion' and self.mana >= 10:
+            self.mana -= 10
+            print(f"{self.name} cast Fire Explosion!")
+            return random.randint(20, 40)
+        elif magic == 'Mana Shield' and self.mana >= 15:
+            self.mana -= 15
+            print(f"{self.name} activated Mana Shield!")
+            return 'Mana Shield Activated'
+        else:
+            print(f"Magic {magic} unavailable or not enough mana.")
+            return 0
+
+# === Enemies and Bosses ===
+class Enemy:
+    def __init__(self, name, hp, attack, defense, experience):
+        self.name = name
+        self.hp = hp
+        self.attack = attack
+        self.defense = defense
+        self.experience = experience
+
+    def attack(self, player):
+        damage = max(0, self.attack - player.skills['defense'])
+        player.take_damage(damage)
+        print(f"{self.name} attacked {player.name} and dealt {damage} damage!")
+
+    def take_damage(self, damage):
+        self.hp -= damage
+        if self.hp <= 0:
+            print(f"{self.name} was defeated!")
+            return True
+        return False
+
+# === Zones and Stages ===
+class Zone:
+    def __init__(self, number, name, enemies, boss=None):
+        self.number = number
+        self.name = name
+        self.enemies = enemies
+        self.boss = boss
+
+    def explore(self, player):
+        print(f"\nExploring Zone {self.number}: {self.name}")
+        for enemy in self.enemies:
+            enemy_alive = True
+            while enemy_alive:
+                print(f"\nYou encountered an enemy: {enemy.name}!")
+                print("1. Attack")
+                print("2. Flee")
+                choice = input("Choose an action: ").strip()
+                if choice == '1':
+                    damage = random.randint(10, player.skills['attack'])
+                    if enemy.take_damage(damage):
+                        player.experience += enemy.experience
+                        player.add_coins(random.randint(5, 20))
+                        break
+                    else:
+                        enemy.attack(player)
+                elif choice == '2':
+                    print(f"You fled from the battle against {enemy.name}.")
+                    break
+                else:
+                    print("Invalid choice.")
+
+        if self.boss:
+            print(f"\nYou reached the boss of the zone: {self.boss.name}!")
+            self.boss_battle(player)
+
+    def boss_battle(self, player):
+        boss = self.boss
+        while boss.hp > 0:
+            print(f"{boss.name} has {boss.hp} health remaining!")
+            print("1. Attack")
+            print("2. Cast Magic")
+            print("3. Flee")
+            choice = input("Choose an action: ").strip()
+
+            if choice == '1':
+                damage = random.randint(player.skills['attack'], player.skills['attack'] + 10)
+                if boss.take_damage(damage):
+                    player.experience += boss.experience
+                    player.add_coins(random.randint(50, 100))
+                    break
+                else:
+                    boss.attack(player)
+            elif choice == '2':
+                magic = input("Choose a magic (Fire Explosion, Mana Shield): ").strip()
+                damage = player.cast_magic(magic)
+                if boss.take_damage(damage):
+                    player.experience += boss.experience
+                    player.add_coins(random.randint(50, 100))
+                    break
+            elif choice == '3':
+                print(f"You fled from the battle against {boss.name}.")
+                break
+            else:
+                print("Invalid choice.")
+
+# === NPCs and Sidequests ===
+class NPC:
+    def __init__(self, name, type='merchant'):
+        self.name = name
+        self.type = type
+        self.sidequest = None
+
+    def offer_sidequest(self, player):
+        if self.type == 'merchant':
+            item = 'Iron Sword'
+            print(f"{self.name} offers an {item} for 50 coins.")
+            player.add_item(item)
+        elif self.type == 'master':
+            self.sidequest = f"Defeat the monster in the {random.choice(['dark path', 'shadow forest'])}."
+            print(f"{self.name} offers a quest: {self.sidequest}")
+            return self.sidequest
+        else:
+            print(f"{self.name} has nothing to offer right now.")
+
+    def interact(self, player):
+        print(f"You approach {self.name}, the {self.type}.")
+        if self.sidequest:
+            print(f"{self.name}: You can undertake a quest: {self.sidequest}")
+            answer = input("Accept quest? (yes/no): ").strip().lower()
+            if answer == 'yes':
+                player.completed_sidequests += 1
+                print(f"You accepted the quest from {self.name}. Good luck!")
+            else:
+                print("You declined the quest.")
+
+# Store System
+class Shop:
+    def __init__(self, name):
+        self.name = name
+        self.items = {
+            'Iron Sword': 50,
+            'Steel Shield': 40,
+            'Health Potion': 20,
+            'Mana Potion': 25,
+            'Magic: Fire Explosion': 100,
+            'Magic: Mana Shield': 120
+        }
+
+    def show_items(self):
+        print(f"Welcome to {self.name}'s shop! Here are the available items:")
+        for item, price in self.items.items():
+            print(f"{item}: {price} coins")
+
+    def buy(self, player, item):
+        if item in self.items:
+            price = self.items[item]
+            if player.coins >= price:
+                player.coins -= price
+                player.add_item(item)
+                print(f"You bought {item}!")
+            else:
+                print("You don't have enough coins!")
+        else:
+            print("This item is not available.")
+
+# Chests on the Path
+class Chest:
+    def __init__(self, zone):
+        self.zone = zone
+        self.items = ['Health Potion', 'Mana Potion', 'Coins']
+        self.coins = random.randint(10, 50)
+        self.item = random.choice(self.items)
+
+    def open(self, player):
+        print(f"You found a chest in Zone {self.zone}!")
+        print(f"You found {self.item}!")
+        if self.item == 'Coins':
+            player.add_coins(self.coins)
+        else:
+            player.add_item(self.item)
+
+# === Start Screen ===
+def show_menu():
+    print("\n=====================")
+    print("  GAME: Sam's Journey")
+    print("=====================")
+    print("1. Start Game")
+    print("2. Load Game")
+    print("3. Exit")
+    option = input("Choose an option: ").strip()
+
+    if option == "1":
+        start_game()
+    elif option == "2":
+        print("Loading game... (Coming soon)")
+        show_menu()  # Implement load game in the future
+    elif option == "3":
+        print("Exiting... See you next time!")
+        exit()
+    else:
+        print("Invalid option. Try again.")
+        show_menu()
+
+# === Function to Start the Game ===
+def start_game():
+    print("Welcome to **Sam's Journey: The Legacy of the Zones**\n")
+    time.sleep(2)
+    print("Prologue: The Rise of Sam")
+    print("Rivora is divided, and you, Sam, are the only one capable of restoring balance.")
+    time.sleep(3)
+    
+    player_name = input("Enter your character's name (Sam): ")
+    if player_name.strip() == "":
+        player_name = "Sam"
+
+    player = Player(player_name)
+
+    # Example of interacting with the shop
+    shop = Shop("Master Zang's Shop")
+    shop.show_items()
+    purchase = input("Do you want to buy something? (yes/no): ").strip().lower()
+    if purchase == "yes":
+        item = input("Which item would you like to buy? (Iron Sword, Health Potion, etc.): ").strip()
+        shop.buy(player, item)
+
+    # Example of interacting with NPC
+    npc = NPC("Master Zang", type="merchant")
+    npc.interact(player)
+
+    # Finding a chest
+    chest = Chest(zone=1)
+    chest.open(player)
+
+    # Starting zone exploration (simplified)
+    zone1 = Zone(1, "Shadow Forest", [Enemy("Goblin", 30, 5, 3, 10), Enemy("Wolf", 50, 7, 4, 15)], boss=Enemy("Goblin Chief", 100, 15, 10, 50))
+    zone1.explore(player)
+
+    player.status()
+
+# Start the game
+if __name__ == "__main__":
+    show_menu()
